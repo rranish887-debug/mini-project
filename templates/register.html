@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Register a new student using AI face recognition."/>
+  <title>AI Attendance – Register Student</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+  <div class="bg-animated">
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="nav-brand-icon">🎓</div>
+      FaceAttend AI
+    </div>
+    <div class="nav-links">
+      <a href="/dashboard">🏠 Dashboard</a>
+      <a href="/register" class="active">📸 Register</a>
+      <a href="/mark">✅ Mark</a>
+      <a href="/records">📋 Records</a>
+      <a href="/logout" class="btn-logout">⏻ Logout</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>📸 Register Student</h1>
+      <p>Capture a clear frontal photo of the student's face to enroll them in the AI recognition system.</p>
+    </div>
+
+    <div class="two-col">
+
+      <!-- Left: Form + Camera -->
+      <div class="card">
+        <h2>🎥 Face Capture</h2>
+
+        <div class="form-group">
+          <label for="studentName">👤 Student Full Name</label>
+          <input
+            type="text" id="studentName"
+            placeholder="e.g. Rahul Kumar" autocomplete="off"
+          />
+        </div>
+
+        <!-- Camera feed -->
+        <div class="camera-wrapper" id="cameraWrapper">
+          <video id="video" autoplay playsinline></video>
+          <canvas id="canvas" style="display:none;"></canvas>
+          <img id="snapshot" alt="Captured photo" style="display:none;"/>
+          <div class="camera-overlay"></div>
+          <div class="face-guide" id="faceGuide"></div>
+          <div class="scan-line" id="scanLine"></div>
+        </div>
+
+        <!-- Camera controls -->
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btnCamera" onclick="startCamera()">
+            🎥 Start Camera
+          </button>
+          <button class="btn btn-warning" id="btnCapture" onclick="capturePhoto()" disabled>
+            📸 Capture
+          </button>
+          <button class="btn btn-danger" id="btnRetake" onclick="retake()" style="display:none;">
+            🔄 Retake
+          </button>
+        </div>
+
+        <!-- Status -->
+        <div id="statusMsg" class="status-msg"></div>
+
+        <!-- Register button -->
+        <button class="btn btn-primary btn-full btn-large" id="btnRegister" onclick="registerStudent()" disabled>
+          ✅ Register Student
+        </button>
+      </div>
+
+      <!-- Right: Registered Students -->
+      <div class="card">
+        <h2>
+          👥 Enrolled Students
+          <span id="stuCount" class="badge badge-count">0</span>
+        </h2>
+        <div id="studentList" class="student-list">
+          <div class="empty-state">
+            <div class="empty-icon">⏳</div>
+            <p class="empty-msg">Loading students…</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    let stream      = null;
+    let capturedB64 = null;
+
+    // ── Start Camera ─────────────────────────────────────────
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+        });
+        const video = document.getElementById("video");
+        video.srcObject = stream;
+        document.getElementById("btnCapture").disabled = false;
+        document.getElementById("btnCamera").disabled  = true;
+        document.getElementById("faceGuide").style.display = "block";
+        document.getElementById("scanLine").style.display  = "block";
+        showStatus("📷 Camera ready — position your face inside the oval guide.", "info");
+      } catch (err) {
+        showStatus("❌ Camera access denied: " + err.message, "error");
+      }
+    }
+
+    // ── Capture Photo ─────────────────────────────────────────
+    function capturePhoto() {
+      const video    = document.getElementById("video");
+      const canvas   = document.getElementById("canvas");
+      const snapshot = document.getElementById("snapshot");
+
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      capturedB64 = canvas.toDataURL("image/jpeg", 0.92);
+
+      snapshot.src           = capturedB64;
+      snapshot.style.display = "block";
+      video.style.display    = "none";
+
+      if (stream) stream.getTracks().forEach(t => t.stop());
+
+      document.getElementById("btnCapture").style.display  = "none";
+      document.getElementById("btnRetake").style.display   = "inline-flex";
+      document.getElementById("btnRegister").disabled      = false;
+      document.getElementById("faceGuide").style.display   = "none";
+      document.getElementById("scanLine").style.display    = "none";
+      showStatus("✅ Photo captured! Enter a name and click Register.", "success");
+    }
+
+    // ── Retake Photo ──────────────────────────────────────────
+    function retake() {
+      capturedB64 = null;
+      document.getElementById("snapshot").style.display   = "none";
+      document.getElementById("video").style.display      = "block";
+      document.getElementById("btnRetake").style.display  = "none";
+      document.getElementById("btnCapture").style.display = "inline-flex";
+      document.getElementById("btnRegister").disabled     = true;
+      document.getElementById("btnCamera").disabled       = false;
+      showStatus("", "");
+      startCamera();
+    }
+
+    // ── Register Student ──────────────────────────────────────
+    async function registerStudent() {
+      const name = document.getElementById("studentName").value.trim();
+
+      if (!name) {
+        showStatus("⚠️ Please enter the student's name.", "error"); return;
+      }
+      if (!capturedB64) {
+        showStatus("⚠️ Please capture a photo first.", "error"); return;
+      }
+
+      const btn = document.getElementById("btnRegister");
+      btn.disabled    = true;
+      btn.innerHTML   = '<span class="spinner"></span> Processing face…';
+
+      try {
+        const res  = await fetch("/api/register", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ name, image: capturedB64 })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast("success", "✅", data.message);
+          showStatus(data.message, "success");
+          document.getElementById("studentName").value      = "";
+          capturedB64 = null;
+          document.getElementById("snapshot").style.display   = "none";
+          document.getElementById("video").style.display      = "block";
+          document.getElementById("btnRetake").style.display  = "none";
+          document.getElementById("btnCapture").style.display = "inline-flex";
+          document.getElementById("btnCamera").disabled       = false;
+          loadStudents();
+        } else {
+          showStatus(data.message, "error");
+          showToast("error", "❌", data.message);
+        }
+      } catch (e) {
+        showStatus("❌ Network error: " + e.message, "error");
+      }
+
+      btn.disabled  = false;
+      btn.innerHTML = "✅ Register Student";
+    }
+
+    // ── Load Students List ────────────────────────────────────
+    async function loadStudents() {
+      const res  = await fetch("/api/students");
+      const data = await res.json();
+      const list = document.getElementById("studentList");
+      const cnt  = document.getElementById("stuCount");
+
+      if (!data.success || data.students.length === 0) {
+        list.innerHTML = `<div class="empty-state">
+          <div class="empty-icon">👤</div>
+          <p class="empty-msg">No students registered yet.<br>Be the first to add one!</p>
+        </div>`;
+        cnt.textContent = "0";
+        return;
+      }
+
+      cnt.textContent = data.students.length;
+      list.innerHTML  = data.students.map((s, i) => `
+        <div class="student-item" style="animation-delay: ${i * 0.05}s">
+          <div class="student-avatar">${s.name.charAt(0).toUpperCase()}</div>
+          <div class="student-info">
+            <strong>${escapeHtml(s.name)}</strong>
+            <small>📅 Enrolled on ${s.created_at.split(" ")[0]}</small>
+          </div>
+          <button class="btn-icon btn-delete" title="Delete student" onclick="deleteStudent(${s.id}, '${escapeHtml(s.name)}')">🗑️</button>
+        </div>
+      `).join("");
+    }
+
+    // ── Delete Student ────────────────────────────────────────
+    async function deleteStudent(id, name) {
+      if (!confirm(`Remove "${name}" and all their attendance records?`)) return;
+      const res  = await fetch(`/api/students/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) { showToast("success", "🗑️", `${name} removed.`); loadStudents(); }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────
+    function showStatus(msg, type) {
+      const el = document.getElementById("statusMsg");
+      el.textContent = msg;
+      el.className   = `status-msg ${type}`;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    function showToast(type, icon, msg) {
+      const tc = document.getElementById("toastContainer");
+      const t  = document.createElement("div");
+      t.className = `toast ${type}`;
+      t.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${escapeHtml(msg)}</span>`;
+      tc.appendChild(t);
+      setTimeout(() => t.remove(), 4000);
+    }
+
+    loadStudents();
+  </script>
+</body>
+</html>

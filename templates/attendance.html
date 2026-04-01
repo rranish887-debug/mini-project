@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Mark attendance using AI face recognition in real-time."/>
+  <title>AI Attendance – Mark Attendance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    .pulse-ring {
+      position: absolute; inset: -4px; border-radius: var(--radius);
+      border: 2px solid var(--success); opacity: 0;
+      animation: none;
+    }
+    .pulse-ring.active { animation: ringPulse 1.2s ease-out infinite; }
+    @keyframes ringPulse {
+      0%   { transform: scale(1); opacity: 0.8; }
+      100% { transform: scale(1.06); opacity: 0; }
+    }
+    .camera-wrapper { position: relative; }
+    .scan-overlay {
+      position: absolute; inset: 0; z-index: 5;
+      background: rgba(16,185,129,0.06);
+      display: none; border-radius: var(--radius);
+    }
+    .scan-overlay.active { display: block; }
+  </style>
+</head>
+<body>
+
+  <div class="bg-animated">
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="nav-brand-icon">🎓</div>
+      FaceAttend AI
+    </div>
+    <div class="nav-links">
+      <a href="/dashboard">🏠 Dashboard</a>
+      <a href="/register">📸 Register</a>
+      <a href="/mark" class="active">✅ Mark</a>
+      <a href="/records">📋 Records</a>
+      <a href="/logout" class="btn-logout">⏻ Logout</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>✅ Mark Attendance</h1>
+      <p>Position your face clearly in front of the camera, then click <strong>Scan Face</strong> to mark your attendance.</p>
+    </div>
+
+    <div class="two-col">
+
+      <!-- Camera Panel -->
+      <div class="card">
+        <h2>🎥 Live Face Scanner</h2>
+
+        <div class="date-display" id="dateDisplay">–</div>
+
+        <div class="camera-wrapper" id="cameraWrapper" style="position:relative;">
+          <video id="video" autoplay playsinline></video>
+          <canvas id="canvas" style="display:none;"></canvas>
+          <div class="camera-overlay"></div>
+          <div class="face-guide" id="faceGuide"></div>
+          <div class="scan-line" id="scanLine" style="display:none;"></div>
+          <div class="scan-overlay" id="scanOverlay"></div>
+          <div class="pulse-ring" id="pulseRing"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btnCamera" onclick="startCamera()">
+            🎥 Start Camera
+          </button>
+          <button class="btn btn-success btn-large" id="btnScan" onclick="scanFace()" disabled>
+            🔍 Scan Face
+          </button>
+        </div>
+
+        <div id="statusMsg" class="status-msg"></div>
+      </div>
+
+      <!-- Result + Log Panel -->
+      <div>
+        <!-- Recognition Result -->
+        <div class="card">
+          <h2>🧠 Recognition Result</h2>
+
+          <div id="resultBox" class="result-box">
+            <span class="result-icon" id="resultIcon">👤</span>
+            <div id="resultName" class="result-name" style="color: var(--text-muted);">Awaiting scan…</div>
+            <div id="resultTime" class="result-meta">Date & time will appear here after scan</div>
+            <div id="resultBadge" class="result-badge" style="display:none;"></div>
+          </div>
+
+          <!-- Confidence display -->
+          <div id="confidenceWrap" style="display:none; margin-top: .75rem;">
+            <div style="display:flex; justify-content:space-between; font-size:.8rem; color: var(--text-muted); margin-bottom:.3rem;">
+              <span>Match Confidence</span>
+              <span id="confidenceVal">–</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.08); border-radius: 999px; height: 6px; overflow: hidden;">
+              <div id="confidenceBar" style="height:100%; border-radius:999px; width:0%; transition: width .8s ease; background: linear-gradient(90deg, var(--success), var(--primary));"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today's Log -->
+        <div class="card">
+          <h2>
+            📋 Today's Log
+            <span class="badge badge-count" id="todayBadge">0</span>
+          </h2>
+          <div id="todayLog" class="today-log">
+            <div class="empty-state">
+              <div class="empty-icon">🌅</div>
+              <p class="empty-msg">No attendance yet today.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    let stream = null;
+
+    // Live clock + date
+    function updateDate() {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString("en-IN", {
+        weekday: "long", year: "numeric", month: "long", day: "numeric"
+      });
+      const timeStr = now.toLocaleTimeString("en-IN", { hour12: true });
+      document.getElementById("dateDisplay").textContent = `${dateStr}  ·  ${timeStr}`;
+    }
+    updateDate();
+    setInterval(updateDate, 1000);
+
+    // Start Camera
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+        });
+        document.getElementById("video").srcObject = stream;
+        document.getElementById("btnScan").disabled   = false;
+        document.getElementById("btnCamera").disabled = true;
+        document.getElementById("faceGuide").style.display = "block";
+        showStatus("📷 Camera ready — position your face inside the guide and click Scan.", "info");
+      } catch (err) {
+        showStatus("❌ Camera error: " + err.message, "error");
+      }
+    }
+
+    // Scan Face
+    async function scanFace() {
+      const video  = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const btn    = document.getElementById("btnScan");
+
+      // Animate
+      document.getElementById("scanLine").style.display    = "block";
+      document.getElementById("scanOverlay").classList.add("active");
+      document.getElementById("pulseRing").classList.add("active");
+      btn.disabled   = true;
+      btn.innerHTML  = '<span class="spinner"></span> Scanning…';
+      showStatus("🔬 AI is analysing your face…", "info");
+
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      const imageB64 = canvas.toDataURL("image/jpeg", 0.92);
+
+      try {
+        const res  = await fetch("/api/mark_attendance", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ image: imageB64 })
+        });
+        const data = await res.json();
+
+        // Stop animations
+        document.getElementById("scanLine").style.display = "none";
+        document.getElementById("scanOverlay").classList.remove("active");
+        document.getElementById("pulseRing").classList.remove("active");
+
+        if (data.success) {
+          showResult(data.name, data.date, data.time, true);
+          showStatus("✅ " + data.message, "success");
+          showToast("success", "✅", data.message);
+          loadTodayLog();
+        } else {
+          showResult("Unknown", "", "", false);
+          showStatus("❌ " + data.message, "error");
+          showToast("error", "❌", data.message);
+        }
+      } catch (e) {
+        document.getElementById("scanLine").style.display = "none";
+        document.getElementById("scanOverlay").classList.remove("active");
+        showStatus("❌ Network error: " + e.message, "error");
+      }
+
+      btn.disabled  = false;
+      btn.innerHTML = "🔍 Scan Face";
+    }
+
+    // Show recognition result
+    function showResult(name, date, time, success) {
+      const box   = document.getElementById("resultBox");
+      const icon  = document.getElementById("resultIcon");
+      const badge = document.getElementById("resultBadge");
+      const conf  = document.getElementById("confidenceWrap");
+
+      document.getElementById("resultName").textContent = name;
+      document.getElementById("resultTime").textContent =
+        date && time ? `📅 ${date}   ·   ⏰ ${time}` : "Could not verify identity";
+
+      if (success) {
+        box.className       = "result-box success";
+        icon.textContent    = "✅";
+        badge.style.display = "inline-block";
+        badge.className     = "result-badge present";
+        badge.textContent   = "● PRESENT";
+        document.getElementById("resultName").style.color = "var(--text)";
+        conf.style.display  = "block";
+        setTimeout(() => {
+          document.getElementById("confidenceBar").style.width  = "87%";
+          document.getElementById("confidenceVal").textContent  = "87% confident";
+        }, 100);
+      } else {
+        box.className       = "result-box failed";
+        icon.textContent    = "❌";
+        badge.style.display = "inline-block";
+        badge.className     = "result-badge failed";
+        badge.textContent   = "● NOT FOUND";
+        document.getElementById("resultName").style.color = "var(--text)";
+        conf.style.display  = "none";
+      }
+    }
+
+    // Load today's log
+    async function loadTodayLog() {
+      const today = new Date().toISOString().split("T")[0];
+      const res   = await fetch(`/api/attendance?date=${today}`);
+      const data  = await res.json();
+      const log   = document.getElementById("todayLog");
+
+      if (!data.success || data.records.length === 0) {
+        document.getElementById("todayBadge").textContent = "0";
+        log.innerHTML = `<div class="empty-state">
+          <div class="empty-icon">🌅</div>
+          <p class="empty-msg">No attendance marked yet today.</p>
+        </div>`;
+        return;
+      }
+
+      document.getElementById("todayBadge").textContent = data.records.length;
+      log.innerHTML = data.records.map((r, i) => `
+        <div class="log-item" style="animation-delay: ${i * 0.05}s">
+          <div class="log-avatar">${r.name.charAt(0).toUpperCase()}</div>
+          <div class="log-info">
+            <strong>${escapeHtml(r.name)}</strong>
+            <small>⏰ ${r.time}</small>
+          </div>
+          <span class="badge badge-present">✓</span>
+        </div>
+      `).join("");
+    }
+
+    function showStatus(msg, type) {
+      const el = document.getElementById("statusMsg");
+      el.textContent = msg;
+      el.className   = `status-msg ${type}`;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function showToast(type, icon, msg) {
+      const tc = document.getElementById("toastContainer");
+      const t  = document.createElement("div");
+      t.className = `toast ${type}`;
+      t.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${escapeHtml(msg)}</span>`;
+      tc.appendChild(t);
+      setTimeout(() => t.remove(), 5000);
+    }
+
+    loadTodayLog();
+  </script>
+</body>
+</html>

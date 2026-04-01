@@ -1,0 +1,40 @@
+# AI Attendance System
+
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets / env
+.env
+*.env
+secrets.py
+
+# Database (don't commit production data)
+# attendance.db   # Comment out if you want to commit dev data
+
+# Logs
+*.log

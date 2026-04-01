@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="AI Attendance Dashboard – Overview of registered students and today's attendance."/>
+  <title>AI Attendance – Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+  <!-- Animated Background -->
+  <div class="bg-animated">
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="nav-brand-icon">🎓</div>
+      FaceAttend AI
+    </div>
+    <div class="nav-links">
+      <a href="/dashboard" class="active">🏠 Dashboard</a>
+      <a href="/register">📸 Register</a>
+      <a href="/mark">✅ Mark</a>
+      <a href="/records">📋 Records</a>
+      <a href="/logout" class="btn-logout">⏻ Logout</a>
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        AI Face Recognition System
+      </div>
+      <h1>Welcome back, Admin 👋</h1>
+      <p>Manage your institution's attendance with cutting-edge AI face recognition technology.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <span class="stat-number" id="totalStudents">–</span>
+        <span class="stat-label">Registered Students</span>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <span class="stat-number" id="todayCount">–</span>
+        <span class="stat-label">Present Today</span>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <span class="stat-number" id="totalRecords">–</span>
+        <span class="stat-label">Total Records</span>
+      </div>
+    </div>
+
+    <!-- Action Cards -->
+    <div class="action-grid">
+
+      <div class="action-card" onclick="location.href='/register'">
+        <div class="action-icon violet">📸</div>
+        <h2>Register Student</h2>
+        <p>Capture a face via webcam and save the student profile to the database with AI encoding.</p>
+        <button class="btn btn-primary">Get Started →</button>
+      </div>
+
+      <div class="action-card" onclick="location.href='/mark'">
+        <div class="action-icon green">✅</div>
+        <h2>Mark Attendance</h2>
+        <p>Open webcam, detect the face in real-time, and automatically log attendance instantly.</p>
+        <button class="btn btn-success">Start Scanning →</button>
+      </div>
+
+      <div class="action-card" onclick="location.href='/records'">
+        <div class="action-icon cyan">📋</div>
+        <h2>View Records</h2>
+        <p>Browse, filter, and export all attendance records by date, student, or time range.</p>
+        <button class="btn btn-info">View Records →</button>
+      </div>
+
+    </div>
+
+    <!-- Recent Activity -->
+    <div style="margin-top: 2rem;">
+      <div class="card">
+        <h2>🕐 Today's Attendance Log
+          <span class="badge badge-info" id="todayBadge">0</span>
+        </h2>
+        <div id="todayLog" class="today-log">
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p class="empty-msg">Loading activity…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    async function loadStats() {
+      const today = new Date().toISOString().split("T")[0];
+
+      try {
+        // Students
+        const sRes  = await fetch("/api/students");
+        const sData = await sRes.json();
+        const count = sData.success ? sData.students.length : 0;
+        animateNumber("totalStudents", count);
+
+        // Attendance
+        const aRes  = await fetch("/api/attendance");
+        const aData = await aRes.json();
+        if (aData.success) {
+          animateNumber("totalRecords", aData.records.length);
+          const todayRec = aData.records.filter(r => r.date === today);
+          animateNumber("todayCount", todayRec.length);
+          document.getElementById("todayBadge").textContent = todayRec.length;
+
+          // Build today's log
+          const logEl = document.getElementById("todayLog");
+          if (todayRec.length === 0) {
+            logEl.innerHTML = `<div class="empty-state">
+              <div class="empty-icon">🌙</div>
+              <p class="empty-msg">No attendance marked yet today.</p>
+            </div>`;
+          } else {
+            logEl.innerHTML = todayRec.slice(0, 10).map((r, i) => `
+              <div class="log-item" style="animation-delay: ${i * 0.06}s">
+                <div class="log-avatar">${r.name.charAt(0).toUpperCase()}</div>
+                <div class="log-info">
+                  <strong>${r.name}</strong>
+                  <small>⏰ ${r.time} &nbsp;·&nbsp; 📅 ${r.date}</small>
+                </div>
+                <span class="badge badge-present">Present</span>
+              </div>
+            `).join("");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load stats:", e);
+      }
+    }
+
+    function animateNumber(id, target) {
+      const el = document.getElementById(id);
+      let current = 0;
+      const step = Math.max(1, Math.ceil(target / 30));
+      const timer = setInterval(() => {
+        current = Math.min(current + step, target);
+        el.textContent = current;
+        if (current >= target) clearInterval(timer);
+      }, 30);
+    }
+
+    loadStats();
+  </script>
+</body>
+</html>

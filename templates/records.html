@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="View, filter, and export all attendance records."/>
+  <title>AI Attendance – Records</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+  <div class="bg-animated">
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="nav-brand-icon">🎓</div>
+      FaceAttend AI
+    </div>
+    <div class="nav-links">
+      <a href="/dashboard">🏠 Dashboard</a>
+      <a href="/register">📸 Register</a>
+      <a href="/mark">✅ Mark</a>
+      <a href="/records" class="active">📋 Records</a>
+      <a href="/logout" class="btn-logout">⏻ Logout</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>📋 Attendance Records</h1>
+      <p>Browse, filter, and export all attendance data. Use the controls below to narrow your search.</p>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="stats-row" id="statsRow" style="grid-template-columns: repeat(3,1fr); margin-bottom: 1.5rem;">
+      <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <span class="stat-number" id="statToday">–</span>
+        <span class="stat-label">Today's Present</span>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <span class="stat-number" id="statTotal">–</span>
+        <span class="stat-label">Total Records</span>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <span class="stat-number" id="statStudents">–</span>
+        <span class="stat-label">Unique Students</span>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card filter-bar">
+      <div class="filter-row">
+        <div class="form-group no-margin">
+          <label for="filterDate">📅 Filter by Date</label>
+          <input type="date" id="filterDate" onchange="loadRecords()"/>
+        </div>
+        <div class="form-group no-margin">
+          <label for="filterName">🔍 Search by Name</label>
+          <input type="text" id="filterName" placeholder="Start typing a name…" oninput="filterTable()"/>
+        </div>
+        <div class="btn-group-right">
+          <button class="btn btn-secondary" onclick="clearFilter()">🔄 All</button>
+          <button class="btn btn-success" onclick="setToday()">📅 Today</button>
+          <button class="btn btn-primary" onclick="exportCSV()">⬇️ Export CSV</button>
+        </div>
+      </div>
+
+      <!-- Summary badges -->
+      <div class="summary-row" id="summaryRow" style="display:none; margin-top: 1rem;">
+        <span class="badge badge-info" id="summaryDate"></span>
+        <span class="badge badge-present" id="summaryCount"></span>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card table-card">
+      <div class="table-wrapper" id="tableWrap">
+        <div class="empty-state" style="padding: 3rem;">
+          <div class="empty-icon">⏳</div>
+          <p class="empty-msg">Loading records…</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    let allRecords = [];
+
+    // ── Load records from API ─────────────────────────────────
+    async function loadRecords() {
+      const dateVal = document.getElementById("filterDate").value;
+      const url     = dateVal ? `/api/attendance?date=${dateVal}` : "/api/attendance";
+
+      const tableWrap = document.getElementById("tableWrap");
+      tableWrap.innerHTML = `<div class="empty-state" style="padding:3rem;">
+        <span class="spinner" style="width:28px;height:28px;border-width:3px;"></span>
+        <p class="empty-msg" style="margin-top:1rem;">Loading…</p>
+      </div>`;
+
+      try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        allRecords = data.success ? data.records : [];
+      } catch { allRecords = []; }
+
+      // Summary strip
+      const summaryRow = document.getElementById("summaryRow");
+      const dateVal2   = document.getElementById("filterDate").value;
+      if (dateVal2 && allRecords.length > 0) {
+        const d = new Date(dateVal2 + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day:"numeric", month:"short", year:"numeric" });
+        document.getElementById("summaryDate").textContent  = `📅 ${d}`;
+        document.getElementById("summaryCount").textContent = `✅ ${allRecords.length} Present`;
+        summaryRow.style.display = "flex";
+      } else {
+        summaryRow.style.display = "none";
+      }
+
+      renderTable(allRecords);
+      updateStats();
+    }
+
+    // ── Update header stats ───────────────────────────────────
+    async function updateStats() {
+      const today = new Date().toISOString().split("T")[0];
+      try {
+        const ar = await (await fetch("/api/attendance")).json();
+        const sr = await (await fetch("/api/students")).json();
+        if (ar.success) {
+          const todayRec = ar.records.filter(r => r.date === today);
+          document.getElementById("statToday").textContent    = todayRec.length;
+          document.getElementById("statTotal").textContent    = ar.records.length;
+          const unique = new Set(ar.records.map(r => r.student_id));
+          document.getElementById("statStudents").textContent = unique.size;
+        }
+      } catch {}
+    }
+
+    // ── Client-side name filter ───────────────────────────────
+    function filterTable() {
+      const q = document.getElementById("filterName").value.toLowerCase();
+      renderTable(q ? allRecords.filter(r => r.name.toLowerCase().includes(q)) : allRecords);
+    }
+
+    // ── Render table ──────────────────────────────────────────
+    function renderTable(records) {
+      const wrap = document.getElementById("tableWrap");
+
+      if (records.length === 0) {
+        wrap.innerHTML = `<div class="empty-state" style="padding:3rem;">
+          <div class="empty-icon">🔍</div>
+          <p class="empty-msg">No records match your filter.<br>Try a different date or name.</p>
+        </div>`;
+        return;
+      }
+
+      wrap.innerHTML = `
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Student</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${records.map((r, i) => `
+              <tr style="animation: slideIn .3s ${i * 0.03}s both;">
+                <td style="color: var(--text-muted); font-size: .82rem;">${i + 1}</td>
+                <td>
+                  <div class="name-cell">
+                    <div class="mini-avatar log-avatar">${escapeHtml(r.name.charAt(0).toUpperCase())}</div>
+                    <strong style="font-weight: 600;">${escapeHtml(r.name)}</strong>
+                  </div>
+                </td>
+                <td style="color: var(--text-muted);">${r.date}</td>
+                <td style="color: var(--text-muted); font-variant-numeric: tabular-nums;">${r.time}</td>
+                <td><span class="badge badge-present">✓ Present</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <p class="record-count">Showing <strong>${records.length}</strong> record${records.length !== 1 ? 's' : ''}</p>
+      `;
+    }
+
+    // ── Set today ─────────────────────────────────────────────
+    function setToday() {
+      document.getElementById("filterDate").value = new Date().toISOString().split("T")[0];
+      document.getElementById("filterName").value = "";
+      loadRecords();
+    }
+
+    // ── Clear filter ──────────────────────────────────────────
+    function clearFilter() {
+      document.getElementById("filterDate").value = "";
+      document.getElementById("filterName").value = "";
+      loadRecords();
+    }
+
+    // ── Export CSV ────────────────────────────────────────────
+    function exportCSV() {
+      const q        = document.getElementById("filterName").value.toLowerCase();
+      const filtered = q ? allRecords.filter(r => r.name.toLowerCase().includes(q)) : allRecords;
+
+      if (filtered.length === 0) {
+        showToast("error", "⚠️", "No records to export.");
+        return;
+      }
+
+      const rows = [["#", "Name", "Date", "Time", "Status"]];
+      filtered.forEach((r, i) => rows.push([i + 1, r.name, r.date, r.time, "Present"]));
+
+      const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const a    = document.createElement("a");
+      a.href     = URL.createObjectURL(blob);
+      a.download = `attendance_${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      showToast("success", "⬇️", `Exported ${filtered.length} records.`);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function showToast(type, icon, msg) {
+      const tc = document.getElementById("toastContainer");
+      const t  = document.createElement("div");
+      t.className = `toast ${type}`;
+      t.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${escapeHtml(msg)}</span>`;
+      tc.appendChild(t);
+      setTimeout(() => t.remove(), 4000);
+    }
+
+    // Default to today
+    setToday();
+  </script>
+</body>
+</html>

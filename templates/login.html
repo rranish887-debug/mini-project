@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="AI-powered face recognition attendance system. Secure, fast, contactless."/>
+  <title>AI Attendance – Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    .auth-body { position: relative; }
+    .particles { position: fixed; inset: 0; pointer-events: none; }
+    .particle {
+      position: absolute; width: 2px; height: 2px; border-radius: 50%;
+      background: var(--primary-light); opacity: 0;
+      animation: floatUp var(--dur, 8s) var(--delay, 0s) ease-in infinite;
+    }
+    @keyframes floatUp {
+      0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+      10%  { opacity: 0.6; }
+      90%  { opacity: 0.3; }
+      100% { transform: translateY(-10vh) scale(1.5); opacity: 0; }
+    }
+  </style>
+</head>
+<body class="auth-body">
+
+  <!-- Animated Background -->
+  <div class="bg-animated">
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <!-- Floating Particles -->
+  <div class="particles" id="particles"></div>
+
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo-wrap">
+      <div class="auth-logo">🎓</div>
+    </div>
+
+    <h1 class="auth-title">FaceAttend AI</h1>
+    <p class="auth-subtitle">Smart attendance powered by face recognition</p>
+
+    <!-- Error alert -->
+    {% if error %}
+      <div class="alert alert-error">⚠️ {{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/login" id="loginForm">
+      <div class="form-group">
+        <label for="username">👤 Username</label>
+        <input
+          type="text" id="username" name="username"
+          placeholder="Enter username" required autocomplete="username"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="password">🔑 Password</label>
+        <input
+          type="password" id="password" name="password"
+          placeholder="Enter password" required autocomplete="current-password"
+        />
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full btn-large" id="loginBtn">
+        🚀 Sign In
+      </button>
+    </form>
+
+    <p class="auth-hint">
+      Default credentials → <code>admin</code> / <code>admin123</code>
+    </p>
+  </div>
+
+  <script>
+    // Particle effect
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 30; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.setProperty('--dur',   (6 + Math.random() * 10) + 's');
+      p.style.setProperty('--delay', (-Math.random() * 10) + 's');
+      p.style.left = Math.random() * 100 + '%';
+      p.style.width = p.style.height = (1 + Math.random() * 3) + 'px';
+      container.appendChild(p);
+    }
+
+    // Loading state on submit
+    document.getElementById('loginForm').addEventListener('submit', () => {
+      const btn = document.getElementById('loginBtn');
+      btn.innerHTML = '<span class="spinner"></span> Signing in…';
+      btn.disabled = true;
+    });
+  </script>
+</body>
+</html>
